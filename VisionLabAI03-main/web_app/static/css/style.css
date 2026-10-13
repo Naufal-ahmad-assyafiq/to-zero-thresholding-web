@@ -760,7 +760,8 @@ body.neo-theme {
     overflow: hidden;
 }
 
-.image-display-frame img {
+.image-display-frame img,
+.image-display-frame canvas {
     max-width: 100%;
     max-height: 440px;
     object-fit: contain;
@@ -768,6 +769,7 @@ body.neo-theme {
     border-radius: var(--neo-radius-sm);
     box-shadow: var(--neo-shadow-sm);
     background-color: #000;
+    display: block;
 }
 
 /* ================= FOOTER ================= */
