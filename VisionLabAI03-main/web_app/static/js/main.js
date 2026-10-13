@@ -3,11 +3,13 @@
  * Praktikum 05: Komputer Visi & NLP
  * Identitas: Naufal Ahmad Assyafiq (NIM: 20241020054)
  * Khusus metode To-Zero Thresholding (cv2.THRESH_TOZERO)
+ * Dioptimalkan untuk Vercel Serverless (In-Memory Processing)
  */
 
 // Global State
 const state = {
     activeImageId: 'bimodal_coins.png',
+    activeImageData: null, // Menyimpan base64 data URL untuk citra upload di memori
     activeImageUrl: '',
     activeImageWidth: 600,
     activeImageHeight: 450
@@ -48,9 +50,15 @@ async function initSampleImages() {
         if (data.samples && data.samples.length > 0) {
             renderSampleCarousel(data.samples);
             selectSample(data.samples[0]);
+        } else {
+            console.warn('Tidak ada sampel citra yang diterima dari server.');
+            // Fallback default trigger
+            runThresholding();
         }
     } catch (err) {
         console.error('Gagal memuat sampel citra:', err);
+        // Tetap jalankan thresholding default agar Before/After dan histogram muncul
+        runThresholding();
     }
 }
 
@@ -58,8 +66,9 @@ function renderSampleCarousel(samples) {
     elements.sampleCarousel.innerHTML = '';
     samples.forEach(sample => {
         const item = document.createElement('div');
+        const safeId = `sample-${sample.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
         item.className = `sample-item ${sample.id === state.activeImageId ? 'active' : ''}`;
-        item.id = `sample-${sample.id.replace('.', '_')}`;
+        item.id = safeId;
         item.innerHTML = `
             <img src="${sample.thumb}" alt="${sample.name}" class="sample-thumb">
             <div class="sample-meta">
@@ -74,18 +83,20 @@ function renderSampleCarousel(samples) {
 
 function selectSample(sample) {
     state.activeImageId = sample.id;
+    state.activeImageData = sample.image_data || null; // Jika ada image_data (hasil upload di memori)
     state.activeImageWidth = sample.width;
     state.activeImageHeight = sample.height;
 
-    // Update active highlight in sidebar
+    // Update highlight aktif di sidebar
     document.querySelectorAll('.sample-item').forEach(el => el.classList.remove('active'));
-    const currentEl = document.getElementById(`sample-${sample.id.replace('.', '_')}`);
+    const safeId = `sample-${sample.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    const currentEl = document.getElementById(safeId);
     if (currentEl) currentEl.classList.add('active');
 
     elements.activeImagePreview.src = sample.thumb;
     elements.activeImageMeta.textContent = `${sample.name} (${sample.width}x${sample.height} px)`;
 
-    // Auto-run thresholding saat ganti gambar
+    // Otomatis jalankan thresholding
     runThresholding();
 }
 
@@ -94,16 +105,19 @@ function initUpload() {
         const file = e.target.files[0];
         if (!file) return;
 
-        // Validasi ukuran file (max 5MB)
-        if (file.size > 5 * 1024 * 1024) {
-            alert('Ukuran file melebihi batas 5 MB. Silakan pilih file yang lebih kecil.');
+        // Validasi ukuran file: Maksimal 4 MB (Sesuai instruksi)
+        const maxBytes = 4 * 1024 * 1024;
+        if (file.size > maxBytes) {
+            alert('Ukuran file melebihi batas 4 MB. Silakan pilih file yang lebih kecil.');
+            elements.fileInput.value = '';
             return;
         }
 
-        // Validasi ekstensi file
+        // Validasi format file
         const ext = file.name.split('.').pop().toLowerCase();
         if (!['png', 'jpg', 'jpeg', 'bmp'].includes(ext)) {
-            alert('Format file tidak didukung. Gunakan PNG, JPG, atau BMP.');
+            alert('Format file tidak didukung. Gunakan PNG, JPG, JPEG, atau BMP.');
+            elements.fileInput.value = '';
             return;
         }
 
@@ -111,36 +125,49 @@ function initUpload() {
         formData.append('file', file);
 
         try {
+            // Tampilkan indikator status upload
+            elements.activeImageMeta.textContent = 'Mengunggah & memproses di memori...';
+
             const res = await fetch('/api/upload', {
                 method: 'POST',
                 body: formData
             });
             const data = await res.json();
+
             if (data.success) {
                 const newSample = {
                     id: data.id,
                     name: data.name,
                     thumb: data.thumb,
+                    image_data: data.image_data, // Disimpan langsung di memori client
                     width: data.width,
                     height: data.height
                 };
-                // Tambahkan ke carousel
+
+                // Sisipkan citra upload ke daftar sampel carousel
                 addUploadedSampleToCarousel(newSample);
                 selectSample(newSample);
             } else {
-                alert('Gagal mengunggah citra: ' + (data.error || 'Unknown'));
+                alert('Gagal mengunggah citra: ' + (data.error || 'Terjadi kesalahan'));
             }
         } catch (err) {
             console.error('Error saat upload:', err);
-            alert('Terjadi kesalahan saat mengunggah file.');
+            alert('Terjadi kesalahan koneksi saat mengunggah file.');
+        } finally {
+            elements.fileInput.value = '';
         }
     });
 }
 
 function addUploadedSampleToCarousel(sample) {
+    const safeId = `sample-${sample.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    // Hapus jika sudah ada elemen dengan ID yang sama
+    const existing = document.getElementById(safeId);
+    if (existing) existing.remove();
+
     const item = document.createElement('div');
     item.className = 'sample-item';
-    item.id = `sample-${sample.id.replace('.', '_')}`;
+    item.id = safeId;
     item.innerHTML = `
         <img src="${sample.thumb}" alt="${sample.name}" class="sample-thumb">
         <div class="sample-meta">
@@ -149,12 +176,12 @@ function addUploadedSampleToCarousel(sample) {
         </div>
     `;
     item.addEventListener('click', () => selectSample(sample));
-    elements.sampleCarousel.appendChild(item);
+    elements.sampleCarousel.prepend(item); // Tempatkan di posisi teratas
 }
 
 // ================= TO-ZERO THRESHOLDING LOGIC =================
 function initThresholdControls() {
-    // Slider T: update label secara real-time dan jalankan thresholding
+    // Slider T: update label real-time
     elements.globalThresholdSlider.addEventListener('input', (e) => {
         elements.globalThresholdVal.textContent = e.target.value;
     });
@@ -180,10 +207,17 @@ async function runThresholding() {
     const applyBlur = elements.threshBlurToggle.checked;
 
     const payload = {
-        image_id: state.activeImageId,
         threshold: threshVal,
         apply_blur: applyBlur
     };
+
+    // Jika citra saat ini berasal dari upload, kirim image_data (base64 di memori)
+    // Jika dari sampel bawaan, kirim image_id
+    if (state.activeImageData) {
+        payload.image_data = state.activeImageData;
+    } else {
+        payload.image_id = state.activeImageId || 'bimodal_coins.png';
+    }
 
     try {
         const res = await fetch('/api/threshold', {
@@ -194,16 +228,16 @@ async function runThresholding() {
         const data = await res.json();
 
         if (data.error) {
-            alert('Error: ' + data.error);
+            console.error('Error thresholding dari server:', data.error);
             return;
         }
 
         if (data.result) {
-            // Tampilkan citra asli (Before) dan hasil (After)
+            // Tampilkan citra Before & After
             elements.threshOriginalImg.src = data.original;
             elements.threshResultImg.src = data.result;
 
-            // Update badge label hasil Before/After
+            // Update badge label hasil Before & After
             const blurLabel = applyBlur ? ' + Blur' : '';
             elements.threshResultTag.textContent = `After: TOZERO (T=${data.calculated_threshold})${blurLabel}`;
 
@@ -213,12 +247,13 @@ async function runThresholding() {
             }
         }
     } catch (err) {
-        console.error('Error thresholding:', err);
+        console.error('Error thresholding fetch:', err);
     }
 }
 
 function renderHistogram(histData, calculatedT) {
     const canvas = elements.histogramCanvas;
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
     const width = canvas.width;
     const height = canvas.height;
@@ -226,7 +261,7 @@ function renderHistogram(histData, calculatedT) {
     // Bersihkan canvas
     ctx.clearRect(0, 0, width, height);
 
-    // Latar belakang bersih
+    // Latar belakang putih bersih
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, width, height);
 
