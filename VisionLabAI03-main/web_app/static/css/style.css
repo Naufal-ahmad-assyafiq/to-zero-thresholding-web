@@ -1,0 +1,858 @@
+/* ===================================================================
+   Visual Studio Segmentasi Citra - Modern Neo-Brutalism Theme
+   Praktikum 05: Komputer Visi & NLP
+   Identitas: Naufal Ahmad Assyafiq (NIM: 20241020054)
+   Metode: To-Zero Thresholding (cv2.THRESH_TOZERO)
+   =================================================================== */
+
+:root {
+    /* Color Palette - Neo-Brutalism */
+    --neo-bg: #FFFDF5;            /* Off-white / Cream */
+    --neo-white: #FFFFFF;
+    --neo-black: #000000;
+    --neo-primary: #5865F2;          /* Electric Blue */
+    --neo-primary-dark: #4752C4;
+    --neo-yellow: #FFD93D;           /* Accent Yellow */
+    --neo-pink: #FF90E8;             /* Accent Pink */
+    --neo-green: #B8F28B;            /* Accent Green */
+    --neo-red: #EF4444;              /* Red Indicator */
+    --neo-gray-light: #F4F4F0;
+    --neo-gray-border: #D1D5DB;
+
+    /* Neo-Brutalism Borders & Shadows */
+    --neo-border-thick: 2.5px solid #000000;
+    --neo-border-regular: 2px solid #000000;
+    --neo-border-thin: 1.5px solid #000000;
+
+    --neo-shadow-lg: 5px 5px 0px #000000;
+    --neo-shadow-md: 4px 4px 0px #000000;
+    --neo-shadow-sm: 2px 2px 0px #000000;
+    --neo-shadow-hover: 2px 2px 0px #000000;
+
+    /* Corner Radii */
+    --neo-radius-sm: 6px;
+    --neo-radius-md: 10px;
+    --neo-radius-lg: 12px;
+    --neo-radius-pill: 999px;
+
+    /* Typography */
+    --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+
+    /* Transitions */
+    --neo-transition: all 0.15s cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ================= RESET & BASE ================= */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body.neo-theme {
+    font-family: var(--font-sans);
+    background-color: var(--neo-bg);
+    color: var(--neo-black);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+    line-height: 1.5;
+}
+
+/* ================= HEADER ================= */
+.app-header {
+    background-color: var(--neo-white);
+    border-bottom: 3px solid var(--neo-black);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    padding: 14px 0;
+}
+
+.header-container {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 0 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+/* Identitas Mahasiswa */
+.identity-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.student-name {
+    font-size: 1.55rem;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    color: var(--neo-black);
+    line-height: 1.15;
+}
+
+.student-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* Neo-Brutalism Badges */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: var(--neo-radius-sm);
+    border: var(--neo-border-regular);
+    color: var(--neo-black);
+}
+
+.badge-nim {
+    background-color: var(--neo-yellow);
+    box-shadow: var(--neo-shadow-sm);
+    font-family: var(--font-mono);
+}
+
+.badge-method {
+    background-color: var(--neo-pink);
+    box-shadow: var(--neo-shadow-sm);
+}
+
+.status-badge {
+    background-color: var(--neo-green);
+    box-shadow: var(--neo-shadow-md);
+    font-size: 0.85rem;
+    font-weight: 800;
+    padding: 6px 14px;
+    border-radius: var(--neo-radius-md);
+    border: var(--neo-border-thick);
+}
+
+/* ================= APP LAYOUT ================= */
+.app-layout {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 24px;
+    display: flex;
+    gap: 24px;
+    flex: 1;
+    width: 100%;
+}
+
+/* ================= COMMON NEO-CARD ================= */
+.card {
+    background-color: var(--neo-white);
+    border: var(--neo-border-thick);
+    border-radius: var(--neo-radius-lg);
+    box-shadow: var(--neo-shadow-lg);
+    padding: 20px;
+    position: relative;
+}
+
+.block-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
+.sidebar-title, .card-title, .panel-heading {
+    font-size: 1.1rem;
+    font-weight: 800;
+    letter-spacing: -0.3px;
+    color: var(--neo-black);
+}
+
+.neo-chip {
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border: var(--neo-border-regular);
+    border-radius: var(--neo-radius-sm);
+    box-shadow: 1.5px 1.5px 0px #000;
+}
+
+.chip-yellow { background-color: var(--neo-yellow); }
+.chip-pink   { background-color: var(--neo-pink); }
+.chip-green  { background-color: var(--neo-green); }
+
+/* ================= SIDEBAR ================= */
+.sidebar {
+    width: 330px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.sidebar-block {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Sample Carousel / Gallery */
+.sample-carousel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 270px;
+    overflow-y: auto;
+    padding-right: 4px;
+    margin-bottom: 16px;
+}
+
+/* Custom Scrollbar Neo-Brutalist */
+.sample-carousel::-webkit-scrollbar {
+    width: 6px;
+}
+.sample-carousel::-webkit-scrollbar-track {
+    background: var(--neo-gray-light);
+    border-left: 1px solid var(--neo-black);
+}
+.sample-carousel::-webkit-scrollbar-thumb {
+    background: var(--neo-black);
+    border-radius: var(--neo-radius-pill);
+}
+
+.sample-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 10px;
+    background-color: var(--neo-white);
+    border: var(--neo-border-regular);
+    border-radius: var(--neo-radius-md);
+    box-shadow: var(--neo-shadow-sm);
+    cursor: pointer;
+    transition: var(--neo-transition);
+}
+
+.sample-item:hover {
+    background-color: var(--neo-bg);
+    transform: translate(-1px, -1px);
+    box-shadow: var(--neo-shadow-md);
+}
+
+.sample-item.active {
+    background-color: var(--neo-yellow);
+    border: var(--neo-border-thick);
+    box-shadow: var(--neo-shadow-md);
+    transform: translate(-2px, -2px);
+}
+
+.sample-thumb {
+    width: 48px;
+    height: 48px;
+    object-fit: cover;
+    border: var(--neo-border-thin);
+    border-radius: var(--neo-radius-sm);
+    background-color: #000;
+    flex-shrink: 0;
+}
+
+.sample-meta {
+    flex: 1;
+    min-width: 0;
+}
+
+.sample-name {
+    font-size: 0.86rem;
+    font-weight: 800;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--neo-black);
+}
+
+.sample-dim {
+    font-size: 0.75rem;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: #4b5563;
+}
+
+/* Area Upload Citra */
+.upload-zone {
+    background-color: var(--neo-bg);
+    border: 2.5px dashed var(--neo-black);
+    border-radius: var(--neo-radius-md);
+    padding: 16px 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: var(--neo-transition);
+}
+
+.upload-zone:hover {
+    background-color: var(--neo-green);
+    transform: translate(-2px, -2px);
+    box-shadow: var(--neo-shadow-md);
+    border-style: solid;
+}
+
+.file-input-hidden {
+    display: none;
+}
+
+.upload-label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+}
+
+.upload-icon-wrapper {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: var(--neo-white);
+    border: var(--neo-border-regular);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--neo-shadow-sm);
+}
+
+.upload-icon {
+    width: 20px;
+    height: 20px;
+    color: var(--neo-black);
+}
+
+.upload-title {
+    font-size: 0.9rem;
+    font-weight: 800;
+    color: var(--neo-black);
+}
+
+.upload-sub {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #555555;
+}
+
+/* Active Preview Card */
+.active-preview-wrapper {
+    background-color: var(--neo-gray-light);
+    border: var(--neo-border-regular);
+    border-radius: var(--neo-radius-md);
+    height: 180px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    margin-bottom: 10px;
+}
+
+#activeImagePreview {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+.image-meta {
+    font-size: 0.8rem;
+    font-weight: 700;
+    background-color: var(--neo-pink);
+    border: var(--neo-border-regular);
+    border-radius: var(--neo-radius-sm);
+    box-shadow: var(--neo-shadow-sm);
+    padding: 6px 10px;
+    text-align: center;
+    color: var(--neo-black);
+    word-break: break-all;
+}
+
+/* ================= MAIN WORKSPACE ================= */
+.main-workspace {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+}
+
+/* Navigasi Tab Neo-Brutalist */
+.tabs-nav {
+    display: flex;
+    gap: 8px;
+    border-bottom: 3px solid var(--neo-black);
+    padding-bottom: 0;
+}
+
+.tab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    background-color: var(--neo-white);
+    border: var(--neo-border-thick);
+    border-bottom: none;
+    border-radius: var(--neo-radius-md) var(--neo-radius-md) 0 0;
+    font-weight: 800;
+    font-size: 0.95rem;
+    color: var(--neo-black);
+    position: relative;
+    top: 3px;
+    box-shadow: 3px -3px 0px #000;
+}
+
+.tab-btn.active {
+    background-color: var(--neo-primary);
+    color: var(--neo-white);
+    box-shadow: 4px -4px 0px #000;
+}
+
+.tab-badge {
+    background-color: var(--neo-yellow);
+    color: var(--neo-black);
+    border: var(--neo-border-regular);
+    border-radius: var(--neo-radius-sm);
+    padding: 1px 6px;
+    font-size: 0.75rem;
+    font-family: var(--font-mono);
+    font-weight: 800;
+}
+
+.tab-pane {
+    display: block;
+    width: 100%;
+}
+
+/* Panel Grid Layout */
+.panel-grid {
+    display: grid;
+    grid-template-columns: 370px 1fr;
+    gap: 24px;
+    align-items: start;
+}
+
+/* Panel Header Box */
+.panel-header-box {
+    padding-bottom: 12px;
+    border-bottom: var(--neo-border-regular);
+    margin-bottom: 16px;
+}
+
+/* Info Box To-Zero */
+.neo-info-box {
+    background-color: var(--neo-yellow);
+    border: var(--neo-border-regular);
+    border-radius: var(--neo-radius-md);
+    box-shadow: var(--neo-shadow-sm);
+    padding: 12px 14px;
+    margin-bottom: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.tip-badge {
+    font-size: 0.76rem;
+    font-weight: 800;
+    color: var(--neo-black);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.tip-desc {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--neo-black);
+    line-height: 1.4;
+}
+
+.tip-code {
+    align-self: flex-start;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    font-weight: 700;
+    background-color: var(--neo-white);
+    border: var(--neo-border-thin);
+    border-radius: var(--neo-radius-sm);
+    padding: 2px 8px;
+    box-shadow: 1.5px 1.5px 0px #000;
+}
+
+/* Control Group */
+.control-group {
+    margin-bottom: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.slider-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.form-label {
+    font-size: 0.9rem;
+    font-weight: 800;
+    color: var(--neo-black);
+}
+
+.slider-badge {
+    background-color: var(--neo-yellow);
+    border: var(--neo-border-regular);
+    border-radius: var(--neo-radius-sm);
+    box-shadow: var(--neo-shadow-sm);
+    font-family: var(--font-mono);
+    font-size: 1.05rem;
+    font-weight: 800;
+    padding: 2px 10px;
+    color: var(--neo-black);
+}
+
+/* Range Slider Neo-Brutalist */
+.neo-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 12px;
+    background: var(--neo-gray-light);
+    border: var(--neo-border-regular);
+    border-radius: var(--neo-radius-pill);
+    outline: none;
+    cursor: pointer;
+}
+
+.neo-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background-color: var(--neo-primary);
+    border: var(--neo-border-thick);
+    box-shadow: var(--neo-shadow-sm);
+    cursor: grab;
+    transition: var(--neo-transition);
+}
+
+.neo-slider::-webkit-slider-thumb:hover {
+    background-color: var(--neo-pink);
+    transform: scale(1.1);
+}
+
+.neo-slider::-moz-range-thumb {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background-color: var(--neo-primary);
+    border: var(--neo-border-thick);
+    box-shadow: var(--neo-shadow-sm);
+    cursor: grab;
+}
+
+.helper-text {
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: #4b5563;
+}
+
+/* Neo-Toggle Switch (Gaussian Blur) */
+.toggle-group {
+    margin-bottom: 18px;
+}
+
+.neo-toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.neo-checkbox-hidden {
+    display: none;
+}
+
+.neo-switch-box {
+    width: 50px;
+    height: 28px;
+    background-color: var(--neo-gray-light);
+    border: var(--neo-border-thick);
+    border-radius: var(--neo-radius-pill);
+    box-shadow: var(--neo-shadow-sm);
+    position: relative;
+    transition: var(--neo-transition);
+    flex-shrink: 0;
+}
+
+.neo-switch-handle {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    background-color: var(--neo-white);
+    border: var(--neo-border-regular);
+    border-radius: 50%;
+    transition: var(--neo-transition);
+}
+
+.neo-checkbox-hidden:checked + .neo-switch-box {
+    background-color: var(--neo-green);
+}
+
+.neo-checkbox-hidden:checked + .neo-switch-box .neo-switch-handle {
+    transform: translateX(22px);
+    background-color: var(--neo-white);
+}
+
+.neo-switch-text {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--neo-black);
+}
+
+/* Histogram Box */
+.neo-hist-card {
+    background-color: var(--neo-bg);
+    border: var(--neo-border-regular);
+    border-radius: var(--neo-radius-md);
+    box-shadow: var(--neo-shadow-sm);
+    padding: 12px;
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.sub-heading {
+    font-size: 0.88rem;
+    font-weight: 800;
+    color: var(--neo-black);
+}
+
+.canvas-container {
+    background-color: var(--neo-white);
+    border: var(--neo-border-thin);
+    border-radius: var(--neo-radius-sm);
+    padding: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#histogramCanvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 120px;
+}
+
+.hist-legend-badge {
+    align-self: center;
+    font-size: 0.78rem;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    background-color: var(--neo-yellow);
+    border: var(--neo-border-thin);
+    border-radius: var(--neo-radius-sm);
+    padding: 3px 10px;
+    box-shadow: 1.5px 1.5px 0px #000;
+    color: var(--neo-black);
+}
+
+/* Action Button */
+.neo-btn-action {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background-color: var(--neo-primary);
+    color: var(--neo-white);
+    border: var(--neo-border-thick);
+    border-radius: var(--neo-radius-md);
+    box-shadow: var(--neo-shadow-md);
+    font-size: 1rem;
+    font-weight: 800;
+    padding: 14px 20px;
+    cursor: pointer;
+    transition: var(--neo-transition);
+}
+
+.neo-btn-action:hover {
+    background-color: var(--neo-primary-dark);
+    transform: translate(2px, 2px);
+    box-shadow: var(--neo-shadow-hover);
+}
+
+.neo-btn-action:active {
+    transform: translate(4px, 4px);
+    box-shadow: 0px 0px 0px #000;
+}
+
+.btn-arrow {
+    font-size: 1.15rem;
+    font-weight: 800;
+}
+
+/* ================= VIEWER PANEL (BEFORE / AFTER) ================= */
+.viewer-panel {
+    display: flex;
+    flex-direction: column;
+}
+
+.comparison-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.neo-viewport {
+    background-color: var(--neo-bg);
+    border: var(--neo-border-thick);
+    border-radius: var(--neo-radius-md);
+    box-shadow: var(--neo-shadow-md);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.viewport-header {
+    border-bottom: var(--neo-border-regular);
+}
+
+.viewport-tag {
+    display: block;
+    width: 100%;
+    padding: 10px 14px;
+    font-size: 0.86rem;
+    font-weight: 800;
+    color: var(--neo-black);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.tag-before {
+    background-color: var(--neo-green);
+}
+
+.tag-after {
+    background-color: var(--neo-pink);
+}
+
+.image-display-frame {
+    background-color: var(--neo-white);
+    padding: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+    max-height: 480px;
+    overflow: hidden;
+}
+
+.image-display-frame img {
+    max-width: 100%;
+    max-height: 440px;
+    object-fit: contain;
+    border: var(--neo-border-regular);
+    border-radius: var(--neo-radius-sm);
+    box-shadow: var(--neo-shadow-sm);
+    background-color: #000;
+}
+
+/* ================= FOOTER ================= */
+.app-footer {
+    background-color: var(--neo-white);
+    border-top: 3px solid var(--neo-black);
+    padding: 18px 24px;
+    margin-top: auto;
+}
+
+.footer-container {
+    max-width: 1600px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.footer-main {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--neo-black);
+}
+
+.footer-sub {
+    font-size: 0.85rem;
+    font-weight: 800;
+    font-family: var(--font-mono);
+    color: var(--neo-primary);
+}
+
+/* ================= RESPONSIVE DESIGN ================= */
+@media (max-width: 1200px) {
+    .panel-grid {
+        grid-template-columns: 340px 1fr;
+        gap: 16px;
+    }
+    .comparison-grid {
+        gap: 14px;
+    }
+    .image-display-frame {
+        min-height: 340px;
+        max-height: 400px;
+    }
+}
+
+@media (max-width: 992px) {
+    .app-layout {
+        flex-direction: column;
+        padding: 16px;
+    }
+    .sidebar {
+        width: 100%;
+    }
+    .sample-carousel {
+        flex-direction: row;
+        overflow-x: auto;
+        overflow-y: hidden;
+        max-height: none;
+        padding-bottom: 8px;
+    }
+    .sample-item {
+        flex-shrink: 0;
+        width: 180px;
+    }
+    .panel-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .header-container {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .comparison-grid {
+        grid-template-columns: 1fr;
+    }
+    .image-display-frame {
+        min-height: 280px;
+    }
+    .footer-container {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}

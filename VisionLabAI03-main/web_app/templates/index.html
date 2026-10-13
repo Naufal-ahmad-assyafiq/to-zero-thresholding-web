@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>To-Zero Thresholding - Naufal Ahmad Assyafiq (20241020054)</title>
+    <meta name="description" content="Aplikasi Web To-Zero Thresholding Modern Neo-Brutalism untuk Praktikum Computer Vision & NLP. Naufal Ahmad Assyafiq (20241020054).">
+    <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css?v=neobrutalism_v1">
+</head>
+<body class="neo-theme">
+    <!-- ================= HEADER: IDENTITAS MAHASISWA & STATUS ================= -->
+    <header class="app-header">
+        <div class="header-container">
+            <div class="identity-group">
+                <h1 class="student-name">Naufal Ahmad Assyafiq</h1>
+                <div class="student-meta">
+                    <span class="badge badge-nim">NIM: 20241020054</span>
+                    <span class="badge badge-method">Metode: To-Zero Thresholding</span>
+                </div>
+            </div>
+            <div class="header-actions">
+                <span class="badge status-badge" id="systemStatus">● Online • Port 5050</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- ================= APP LAYOUT ================= -->
+    <div class="app-layout">
+        <!-- ================= SIDEBAR KIRI ================= -->
+        <aside class="sidebar" id="sidebarSection">
+            <!-- Blok 1: Galeri Citra & Upload -->
+            <div class="sidebar-block card">
+                <div class="block-header">
+                    <h2 class="sidebar-title">Citra Masukan</h2>
+                    <span class="neo-chip chip-yellow">Sampel</span>
+                </div>
+                <div class="sample-carousel" id="sampleCarousel">
+                    <!-- Diisi dinamis lewat main.js -->
+                    <div class="loader-spinner"></div>
+                </div>
+
+                <!-- Area Upload Citra -->
+                <div class="upload-zone" id="uploadDropZone">
+                    <input type="file" id="fileInput" accept=".png,.jpg,.jpeg,.bmp" class="file-input-hidden">
+                    <label for="fileInput" class="upload-label" id="uploadLabel">
+                        <div class="upload-icon-wrapper">
+                            <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                            </svg>
+                        </div>
+                        <span class="upload-title">Unggah Citra Sendiri</span>
+                        <span class="upload-sub">PNG, JPG, BMP (Maks 5MB)</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Blok 2: Pratinjau Citra Aktif -->
+            <div class="sidebar-block card current-image-card">
+                <div class="block-header">
+                    <h3 class="card-title">Citra Aktif Saat Ini</h3>
+                    <span class="neo-chip chip-pink">Aktif</span>
+                </div>
+                <div class="active-preview-wrapper">
+                    <img id="activeImagePreview" src="" alt="Pratinjau Citra Aktif">
+                </div>
+                <div class="image-meta" id="activeImageMeta">Memuat citra...</div>
+            </div>
+        </aside>
+
+        <!-- ================= MAIN WORKSPACE ================= -->
+        <main class="main-workspace" id="mainWorkspace">
+            <!-- Navigasi Tab Neo-Brutalist tunggal -->
+            <nav class="tabs-nav" aria-label="Menu Segmentasi">
+                <div class="tab-btn active" id="tabBtnThreshold" data-target="tabThreshold">
+                    <span class="tab-badge">01</span>
+                    <span class="tab-title">To-Zero Thresholding</span>
+                </div>
+            </nav>
+
+            <!-- Workspace Konten -->
+            <section class="tab-pane active" id="tabThreshold">
+                <div class="panel-grid">
+                    <!-- Panel Pengaturan (Kiri) -->
+                    <div class="controls-panel card">
+                        <div class="panel-header-box">
+                            <h2 class="panel-heading">Pengaturan To-Zero Thresholding</h2>
+                        </div>
+                        
+                        <!-- Info Card To-Zero -->
+                        <div class="panel-tip neo-info-box">
+                            <div class="tip-badge">⚡ METODE TO-ZERO</div>
+                            <p class="tip-desc">
+                                Piksel dengan intensitas <strong>&gt; T</strong> dipertahankan, sedangkan piksel dengan intensitas <strong>&le; T</strong> diubah menjadi <strong>0 (hitam)</strong>.
+                            </p>
+                            <code class="tip-code">cv2.THRESH_TOZERO</code>
+                        </div>
+
+                        <!-- Slider T (Global) -->
+                        <div class="control-group" id="globalSliderGroup">
+                            <div class="slider-header">
+                                <label for="globalThresholdSlider" class="form-label">Nilai Ambang Global (T)</label>
+                                <span class="slider-badge" id="globalThresholdVal">89</span>
+                            </div>
+                            <input type="range" id="globalThresholdSlider" min="0" max="255" value="89" class="form-slider neo-slider">
+                            <small class="helper-text">Geser slider untuk mengatur nilai ambang T (0–255). Nilai awal: <strong>89</strong>.</small>
+                        </div>
+
+                        <!-- Toggle Gaussian Blur -->
+                        <div class="control-group toggle-group">
+                            <label class="neo-toggle-label" for="threshBlurToggle">
+                                <input type="checkbox" id="threshBlurToggle" class="neo-checkbox-hidden">
+                                <span class="neo-switch-box">
+                                    <span class="neo-switch-handle"></span>
+                                </span>
+                                <span class="neo-switch-text">Terapkan Gaussian Blur (Denoise)</span>
+                            </label>
+                        </div>
+
+                        <!-- Histogram Canvas -->
+                        <div class="histogram-wrapper neo-hist-card">
+                            <div class="hist-header">
+                                <h3 class="sub-heading">Histogram Intensitas Grayscale</h3>
+                            </div>
+                            <div class="canvas-container">
+                                <canvas id="histogramCanvas" width="300" height="120"></canvas>
+                            </div>
+                            <div class="hist-legend-badge" id="histLegendText">Nilai Ambang Terpilih (T) = 89</div>
+                        </div>
+
+                        <!-- Tombol Aksi Terapkan -->
+                        <button class="btn btn-primary neo-btn-action" id="btnRunThreshold">
+                            <span>Terapkan Thresholding</span>
+                            <span class="btn-arrow">➔</span>
+                        </button>
+                    </div>
+
+                    <!-- Panel Viewer Hasil (Kanan) -->
+                    <div class="viewer-panel card">
+                        <div class="panel-header-box">
+                            <h2 class="panel-heading">Hasil Visualisasi Segmentasi</h2>
+                        </div>
+                        <div class="comparison-grid">
+                            <!-- Viewport Before -->
+                            <div class="viewport-box neo-viewport">
+                                <div class="viewport-header">
+                                    <span class="viewport-tag tag-before">Before (Citra Masukan)</span>
+                                </div>
+                                <div class="image-display-frame">
+                                    <img id="threshOriginalImg" src="" alt="Citra Masukan Asli">
+                                </div>
+                            </div>
+
+                            <!-- Viewport After -->
+                            <div class="viewport-box neo-viewport">
+                                <div class="viewport-header">
+                                    <span class="viewport-tag tag-after" id="threshResultTag">After: TOZERO (T=89)</span>
+                                </div>
+                                <div class="image-display-frame">
+                                    <img id="threshResultImg" src="" alt="Hasil To-Zero Thresholding">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- ================= FOOTER ================= -->
+    <footer class="app-footer">
+        <div class="footer-container">
+            <p class="footer-main"><strong>Praktikum 05: Komputer Visi & NLP</strong> — Segmentasi Citra Digital (To-Zero Thresholding)</p>
+            <p class="footer-sub">Naufal Ahmad Assyafiq • NIM: 20241020054</p>
+        </div>
+    </footer>
+
+    <script src="/static/js/main.js?v=neobrutalism_v1"></script>
+</body>
+</html>
