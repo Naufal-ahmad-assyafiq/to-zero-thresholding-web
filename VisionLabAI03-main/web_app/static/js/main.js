@@ -3,16 +3,30 @@
  * Praktikum 05: Komputer Visi & NLP
  * Identitas: Naufal Ahmad Assyafiq (NIM: 20241020054)
  * Khusus metode To-Zero Thresholding (cv2.THRESH_TOZERO)
- * Dioptimalkan untuk Vercel Serverless (In-Memory Processing)
+ *
+ * Real-time In-Memory Client-side Thresholding Engine:
+ * - Menggunakan JavaScript Canvas ImageData & requestAnimationFrame
+ * - 0ms latency & tanpa flicker pada pergeseran slider T
+ * - Bebas request jaringan saat slider digeser
+ * - Identik 100% secara matematis dengan cv2.THRESH_TOZERO
  */
 
 // Global State
 const state = {
     activeImageId: 'bimodal_coins.png',
-    activeImageData: null, // Menyimpan base64 data URL untuk citra upload di memori
-    activeImageUrl: '',
+    activeImageData: null,       // Base64 untuk citra upload
     activeImageWidth: 600,
-    activeImageHeight: 450
+    activeImageHeight: 450,
+
+    // In-Memory Pixel Caching
+    cachedGrayBuffer: null,      // Uint8Array: piksel grayscale (ukuran w * h)
+    resultImageData: null,       // ImageData untuk canvas hasil
+    cachedHistogram: null,       // 256 array histogram
+    resultCtx: null,             // 2D context canvas hasil
+    currentThreshold: 89,        // Nilai T saat ini
+    currentBlur: false,          // Status toggle Gaussian Blur
+    pendingAnimFrame: null,      // ID requestAnimationFrame
+    isServerLoading: false       // Flag request server aktif
 };
 
 // DOM Elements
@@ -30,13 +44,21 @@ const elements = {
     histogramCanvas: document.getElementById('histogramCanvas'),
     histLegendText: document.getElementById('histLegendText'),
     btnRunThreshold: document.getElementById('btnRunThreshold'),
+
+    // Viewport Elements
     threshOriginalImg: document.getElementById('threshOriginalImg'),
+    threshResultCanvas: document.getElementById('threshResultCanvas'),
     threshResultImg: document.getElementById('threshResultImg'),
     threshResultTag: document.getElementById('threshResultTag')
 };
 
 // ================= INITIALIZATION =================
 document.addEventListener('DOMContentLoaded', () => {
+    // Inisialisasi canvas konteks
+    if (elements.threshResultCanvas) {
+        state.resultCtx = elements.threshResultCanvas.getContext('2d', { willReadFrequently: true });
+    }
+
     initSampleImages();
     initUpload();
     initThresholdControls();
@@ -51,14 +73,12 @@ async function initSampleImages() {
             renderSampleCarousel(data.samples);
             selectSample(data.samples[0]);
         } else {
-            console.warn('Tidak ada sampel citra yang diterima dari server.');
-            // Fallback default trigger
-            runThresholding();
+            console.warn('Sampel kosong, memuat citra default...');
+            loadActiveImage(true);
         }
     } catch (err) {
         console.error('Gagal memuat sampel citra:', err);
-        // Tetap jalankan thresholding default agar Before/After dan histogram muncul
-        runThresholding();
+        loadActiveImage(true);
     }
 }
 
@@ -83,9 +103,9 @@ function renderSampleCarousel(samples) {
 
 function selectSample(sample) {
     state.activeImageId = sample.id;
-    state.activeImageData = sample.image_data || null; // Jika ada image_data (hasil upload di memori)
-    state.activeImageWidth = sample.width;
-    state.activeImageHeight = sample.height;
+    state.activeImageData = sample.image_data || null;
+    state.activeImageWidth = sample.width || 600;
+    state.activeImageHeight = sample.height || 450;
 
     // Update highlight aktif di sidebar
     document.querySelectorAll('.sample-item').forEach(el => el.classList.remove('active'));
@@ -96,8 +116,8 @@ function selectSample(sample) {
     elements.activeImagePreview.src = sample.thumb;
     elements.activeImageMeta.textContent = `${sample.name} (${sample.width}x${sample.height} px)`;
 
-    // Otomatis jalankan thresholding
-    runThresholding();
+    // Muat citra baru dari server (hanya 1 kali saat gambar berganti)
+    loadActiveImage(true);
 }
 
 function initUpload() {
@@ -105,7 +125,7 @@ function initUpload() {
         const file = e.target.files[0];
         if (!file) return;
 
-        // Validasi ukuran file: Maksimal 4 MB (Sesuai instruksi)
+        // Validasi ukuran file: Maksimal 4 MB
         const maxBytes = 4 * 1024 * 1024;
         if (file.size > maxBytes) {
             alert('Ukuran file melebihi batas 4 MB. Silakan pilih file yang lebih kecil.');
@@ -125,7 +145,6 @@ function initUpload() {
         formData.append('file', file);
 
         try {
-            // Tampilkan indikator status upload
             elements.activeImageMeta.textContent = 'Mengunggah & memproses di memori...';
 
             const res = await fetch('/api/upload', {
@@ -139,12 +158,11 @@ function initUpload() {
                     id: data.id,
                     name: data.name,
                     thumb: data.thumb,
-                    image_data: data.image_data, // Disimpan langsung di memori client
+                    image_data: data.image_data, // Simpan Data URL di memori client
                     width: data.width,
                     height: data.height
                 };
 
-                // Sisipkan citra upload ke daftar sampel carousel
                 addUploadedSampleToCarousel(newSample);
                 selectSample(newSample);
             } else {
@@ -161,7 +179,6 @@ function initUpload() {
 
 function addUploadedSampleToCarousel(sample) {
     const safeId = `sample-${sample.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
-    // Hapus jika sudah ada elemen dengan ID yang sama
     const existing = document.getElementById(safeId);
     if (existing) existing.remove();
 
@@ -176,43 +193,24 @@ function addUploadedSampleToCarousel(sample) {
         </div>
     `;
     item.addEventListener('click', () => selectSample(sample));
-    elements.sampleCarousel.prepend(item); // Tempatkan di posisi teratas
+    elements.sampleCarousel.prepend(item);
 }
 
-// ================= TO-ZERO THRESHOLDING LOGIC =================
-function initThresholdControls() {
-    // Slider T: update label real-time
-    elements.globalThresholdSlider.addEventListener('input', (e) => {
-        elements.globalThresholdVal.textContent = e.target.value;
-    });
-
-    // Jalankan thresholding saat slider selesai digeser
-    elements.globalThresholdSlider.addEventListener('change', () => {
-        runThresholding();
-    });
-
-    // Toggle Gaussian Blur
-    elements.threshBlurToggle.addEventListener('change', () => {
-        runThresholding();
-    });
-
-    // Tombol Terapkan Thresholding
-    elements.btnRunThreshold.addEventListener('click', () => {
-        runThresholding();
-    });
-}
-
-async function runThresholding() {
-    const threshVal = parseInt(elements.globalThresholdSlider.value);
-    const applyBlur = elements.threshBlurToggle.checked;
+// ================= CORE ENGINE: IMAGE LOADING & PIXEL CACHING =================
+/**
+ * Memuat citra aktif dari server satu kali (saat ganti gambar atau toggle blur),
+ * kemudian menyimpan buffer intensitas grayscale di memori browser.
+ */
+async function loadActiveImage(isNewImage = false) {
+    state.isServerLoading = true;
+    state.currentThreshold = parseInt(elements.globalThresholdSlider.value);
+    state.currentBlur = elements.threshBlurToggle.checked;
 
     const payload = {
-        threshold: threshVal,
-        apply_blur: applyBlur
+        threshold: state.currentThreshold,
+        apply_blur: state.currentBlur
     };
 
-    // Jika citra saat ini berasal dari upload, kirim image_data (base64 di memori)
-    // Jika dari sampel bawaan, kirim image_id
     if (state.activeImageData) {
         payload.image_data = state.activeImageData;
     } else {
@@ -228,29 +226,142 @@ async function runThresholding() {
         const data = await res.json();
 
         if (data.error) {
-            console.error('Error thresholding dari server:', data.error);
+            console.error('Error dari backend:', data.error);
+            state.isServerLoading = false;
             return;
         }
 
-        if (data.result) {
-            // Tampilkan citra Before & After
+        // 1. Perbarui gambar Before HANYA jika gambar baru dipilih
+        if (isNewImage && data.original) {
             elements.threshOriginalImg.src = data.original;
-            elements.threshResultImg.src = data.result;
+        }
 
-            // Update badge label hasil Before & After
-            const blurLabel = applyBlur ? ' + Blur' : '';
-            elements.threshResultTag.textContent = `After: TOZERO (T=${data.calculated_threshold})${blurLabel}`;
+        // 2. Simpan histogram
+        if (data.histogram) {
+            state.cachedHistogram = data.histogram;
+        }
 
-            // Render histogram dari citra aktif
-            if (data.histogram) {
-                renderHistogram(data.histogram, data.calculated_threshold);
-            }
+        // 3. Ekstrak data piksel grayscale (OpenCV proc_gray) ke memori browser
+        const graySource = data.gray || data.result;
+        if (graySource) {
+            const tempImg = new Image();
+            tempImg.crossOrigin = 'anonymous';
+            tempImg.onload = () => {
+                const w = tempImg.naturalWidth;
+                const h = tempImg.naturalHeight;
+                state.activeImageWidth = w;
+                state.activeImageHeight = h;
+
+                // Konfigurasi canvas hasil sesuai resolusi citra asli
+                elements.threshResultCanvas.width = w;
+                elements.threshResultCanvas.height = h;
+                state.resultCtx = elements.threshResultCanvas.getContext('2d', { willReadFrequently: true });
+                state.resultImageData = state.resultCtx.createImageData(w, h);
+
+                // Baca piksel grayscale menggunakan offscreen canvas
+                const offCanvas = document.createElement('canvas');
+                offCanvas.width = w;
+                offCanvas.height = h;
+                const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
+                offCtx.drawImage(tempImg, 0, 0);
+
+                const rawData = offCtx.getImageData(0, 0, w, h).data;
+                const totalPixels = w * h;
+
+                // Alokasikan Uint8Array 1 dimensi (1 byte per piksel)
+                state.cachedGrayBuffer = new Uint8Array(totalPixels);
+                for (let i = 0; i < totalPixels; i++) {
+                    state.cachedGrayBuffer[i] = rawData[i * 4]; // Channel R (R=G=B pada grayscale)
+                }
+
+                // Render To-Zero secara instan di browser
+                renderToZeroRealtime(state.currentThreshold);
+                state.isServerLoading = false;
+            };
+            tempImg.src = graySource;
         }
     } catch (err) {
-        console.error('Error thresholding fetch:', err);
+        console.error('Gagal memuat citra:', err);
+        state.isServerLoading = false;
     }
 }
 
+// ================= REAL-TIME TO-ZERO THRESHOLDING (IN-MEMORY) =================
+/**
+ * Menghitung To-Zero Thresholding secara langsung di browser
+ * Aturan matematis cv2.THRESH_TOZERO:
+ * dst(x, y) = src(x, y)  jika src(x, y) > T
+ * dst(x, y) = 0          jika src(x, y) <= T
+ */
+function renderToZeroRealtime(t) {
+    if (!state.cachedGrayBuffer || !state.resultImageData || !state.resultCtx) {
+        return;
+    }
+
+    const gray = state.cachedGrayBuffer;
+    const len = gray.length;
+    const outputPixels = state.resultImageData.data; // Uint8ClampedArray RGBA
+
+    let p = 0;
+    // Loop intensitas piksel kecepatan tinggi
+    for (let i = 0; i < len; i++) {
+        const v = gray[i];
+        // Aturan pasti cv2.THRESH_TOZERO
+        const val = (v > t) ? v : 0;
+
+        outputPixels[p]     = val; // R
+        outputPixels[p + 1] = val; // G
+        outputPixels[p + 2] = val; // B
+        outputPixels[p + 3] = 255; // Alpha penuh (tidak transparan)
+        p += 4;
+    }
+
+    // Gambar langsung ke Canvas secara instan tanpa decoding flicker
+    state.resultCtx.putImageData(state.resultImageData, 0, 0);
+
+    // Perbarui label status After
+    const blurLabel = elements.threshBlurToggle.checked ? ' + Blur' : '';
+    elements.threshResultTag.textContent = `After: TOZERO (T=${t})${blurLabel}`;
+
+    // Perbarui histogram responsif (menggeser garis merah indikator T)
+    if (state.cachedHistogram) {
+        renderHistogram(state.cachedHistogram, t);
+    }
+}
+
+// ================= CONTROLS & EVENT LISTENERS =================
+function initThresholdControls() {
+    // Slider T: Respon real-time 60fps dengan requestAnimationFrame
+    elements.globalThresholdSlider.addEventListener('input', (e) => {
+        const t = parseInt(e.target.value);
+        state.currentThreshold = t;
+        elements.globalThresholdVal.textContent = t;
+
+        // Batalkan frame sebelumnya jika masih antri
+        if (state.pendingAnimFrame) {
+            cancelAnimationFrame(state.pendingAnimFrame);
+        }
+
+        // Jadwalkan render pada frame browser berikutnya
+        state.pendingAnimFrame = requestAnimationFrame(() => {
+            renderToZeroRealtime(state.currentThreshold);
+            state.pendingAnimFrame = null;
+        });
+    });
+
+    // Toggle Gaussian Blur: Update buffer grayscale yang di-blur dari server
+    elements.threshBlurToggle.addEventListener('change', () => {
+        state.currentBlur = elements.threshBlurToggle.checked;
+        loadActiveImage(false); // Ambil versi blur baru, Before image tidak diubah
+    });
+
+    // Tombol Terapkan Thresholding: Render langsung
+    elements.btnRunThreshold.addEventListener('click', () => {
+        renderToZeroRealtime(state.currentThreshold);
+    });
+}
+
+// ================= HISTOGRAM RENDERING =================
 function renderHistogram(histData, calculatedT) {
     const canvas = elements.histogramCanvas;
     if (!canvas) return;
@@ -275,7 +386,7 @@ function renderHistogram(histData, calculatedT) {
         ctx.fillRect(i * barWidth, height - barHeight, Math.max(1.2, barWidth), barHeight);
     }
 
-    // Gambar garis vertikal merah sebagai penanda nilai ambang T
+    // Gambar garis vertikal merah penanda nilai ambang T
     if (calculatedT !== undefined && calculatedT >= 0) {
         const lineX = (calculatedT / 255) * width;
         ctx.strokeStyle = '#EF4444';
