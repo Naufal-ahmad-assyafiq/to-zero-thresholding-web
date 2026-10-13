@@ -306,6 +306,7 @@ def process_threshold():
 
     return jsonify({
         "original": encode_image(img),
+        "gray": encode_image(proc_gray),
         "result": encode_image(res),
         "histogram": hist,
         "calculated_threshold": thresh_val,
